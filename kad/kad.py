@@ -51,10 +51,10 @@ class DHTRequestHandler(socketserver.BaseRequestHandler):
 		info = message["peer_info"]
 		peer = Peer(client_host, client_port, id, info)
 		peer.pong(socket=self.server.socket, peer_id=self.server.dht.peer.id, lock=self.server.send_lock)
-		
+
 	def handle_pong(self, message):
 		pass
-		
+
 	def handle_find(self, message, find_value=False):
 		key = message["id"]
 		id = message["peer_id"]
@@ -62,8 +62,8 @@ class DHTRequestHandler(socketserver.BaseRequestHandler):
 		client_host, client_port = self.client_address
 		peer = Peer(client_host, client_port, id, info)
 		response_socket = self.request[1]
-		if find_value and (key in self.server.dht.data):
-			value = self.server.dht.data[key]
+		if find_value and (str(key) in self.server.dht.data):
+			value = self.server.dht.data[str(key)]
 			peer.found_value(id, value, message["rpc_id"], socket=response_socket, peer_id=self.server.dht.peer.id, peer_info=self.server.dht.peer.info, lock=self.server.send_lock)
 		else:
 			nearest_nodes = self.server.dht.buckets.nearest_nodes(id)
@@ -78,16 +78,16 @@ class DHTRequestHandler(socketserver.BaseRequestHandler):
 		del self.server.dht.rpc_ids[rpc_id]
 		nearest_nodes = [Peer(*peer) for peer in message["nearest_nodes"]]
 		shortlist.update(nearest_nodes)
-		
+
 	def handle_found_value(self, message):
 		rpc_id = message["rpc_id"]
 		shortlist = self.server.dht.rpc_ids[rpc_id]
 		del self.server.dht.rpc_ids[rpc_id]
 		shortlist.set_complete(message["value"])
-		
+
 	def handle_store(self, message):
 		key = message["id"]
-		self.server.dht.data[key] = message["value"]
+		self.server.dht.data[str(key)] = message["value"]
 
 
 class DHTServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
@@ -95,14 +95,14 @@ class DHTServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
 		socketserver.UDPServer.__init__(self, host_address, handler_cls)
 		self.send_lock = threading.Lock()
 
-		
+
 class DHT(object):
-	def __init__(self, host, port, id=None, seeds=[], storage={}, info={}, requesthandler=DHTRequestHandler):
+	def __init__(self, host, port, id=None, seeds=[], storage={}, info={}, hash_function=hashing.hash_function, requesthandler=DHTRequestHandler):
 		if not id:
 			id = random_id()
 		self.storage = storage
 		self.info = info
-		self.hash_function = hashing.hash_function
+		self.hash_function = hash_function
 		self.peer = Peer(host, port, id, info)
 		self.data = self.storage
 		self.buckets = BucketSet(k, id_bits, self.peer.id)
@@ -117,7 +117,7 @@ class DHT(object):
 	def identity (self):
 		return self.peer.id
 
-	
+
 	def iterative_find_nodes(self, key, boot_peer=None):
 		shortlist = Shortlist(k, key)
 		shortlist.update(self.buckets.nearest_nodes(key, limit=alpha))
@@ -135,7 +135,7 @@ class DHT(object):
 			time.sleep(iteration_sleep)
 			boot_peer = None
 		return shortlist.results()
-		
+
 	def iterative_find_value(self, key):
 		shortlist = Shortlist(k, key)
 		shortlist.update(self.buckets.nearest_nodes(key, limit=alpha))
@@ -155,17 +155,17 @@ class DHT(object):
 	def peers (self):
 		return self.buckets.to_dict ()
 
-	# Boostrap the network with a list of bootstrap nodes			
+	# Boostrap the network with a list of bootstrap nodes
 	def bootstrap(self, bootstrap_nodes = []):
 		for bnode in bootstrap_nodes:
 			boot_peer = Peer(bnode[0], bnode[1], "", "")
 			self.iterative_find_nodes(self.peer.id, boot_peer=boot_peer)
-		
+
 		if len (bootstrap_nodes) == 0:
 			for bnode in self.buckets.to_list ():
 				self.iterative_find_nodes(self.peer.id, boot_peer=Peer (bnode[0], bnode[1], bnode[2], bnode[3]))
-				
-				
+
+
 
 	# Get a value in a sync way, calling an handler
 	def get_sync (self, key, handler):
@@ -180,13 +180,13 @@ class DHT(object):
 	# Get a value in async way
 	def get (self, key, handler):
 		#print ('dht.get',key)
-		t = threading.Thread(target=self.get_sync, args=(key, handler))		
-		t.start ()	
+		t = threading.Thread(target=self.get_sync, args=(key, handler))
+		t.start ()
 
 
 	# Iterator
 	def __iter__ (self):
-		return self.data.__iter__ ()
+		return map(lambda key: int(key), self.data.__iter__ ())
 
 	# Operator []
 	def __getitem__(self, key):
@@ -194,23 +194,23 @@ class DHT(object):
 			hashed_key = key
 		else:
 			hashed_key = self.hash_function (key)
-			
-		if hashed_key in self.data:
-			return self.data[hashed_key]
+
+		if str(hashed_key) in self.data:
+			return self.data[str(hashed_key)]
 		result = self.iterative_find_value(hashed_key)
 		if result:
 			return result
 		raise KeyError
-		
+
 	# Operator []=
 	def __setitem__(self, key, value):
 		hashed_key = self.hash_function (key)
 		#print ('dht.set',key,value,hashed_key)
 		nearest_nodes = self.iterative_find_nodes(hashed_key)
 		if not nearest_nodes:
-			self.data[hashed_key] = value
+			self.data[str(hashed_key)] = value
 		for node in nearest_nodes:
 			node.store(hashed_key, value, socket=self.server.socket, peer_id=self.peer.id)
-		
+
 	def tick():
 		pass
