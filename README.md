@@ -39,13 +39,14 @@ dht = DHT(host, port, storage=shelve.open ('sto.dat'))
 
 ## Example: Custom hash function
 
-By default, kad.py doesn't hash keys. We can provide a custom hash_function.
+By default, kad.py hash the keys with md5 function. We can provide a custom hash_function.
+Note: Keep in mind that hash functions must return int values for this implementation.
 
 ```python
 from kad import DHT
 
 host, port = 'localhost', 3000
-dht = DHT(host, port, hash_function=lambda d: d[0:4])
+dht = DHT(host, port, hash_function=lambda key: int(hashlib.sha256(key.encode('utf8')).hexdigest(), 16))
 ```
 
 
@@ -62,9 +63,9 @@ class CustomRequestHandler (kad.DHTRequestHandler):
         print (message['value'])
         return super (CustomRequestHandler, self).handle_store (message)
 
-    
+
 d = DHT ('localhost', 3030, requesthandler=CustomRequestHandler)
-    
+
 d['ciao'] = {'hola': 12}
 ```
 
