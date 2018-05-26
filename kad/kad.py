@@ -112,11 +112,10 @@ class DHT(object):
 		self.server_thread = threading.Thread(target=self.server.serve_forever)
 		self.server_thread.daemon = True
 		self.server_thread.start()
-		self.bootstrap (seeds)
+		self.bootstrap(seeds)
 
 	def identity (self):
 		return self.peer.id
-
 
 	def iterative_find_nodes(self, key, boot_peer=None):
 		shortlist = Shortlist(k, key)
@@ -131,7 +130,7 @@ class DHT(object):
 				shortlist.mark(peer)
 				rpc_id = random.getrandbits(id_bits)
 				self.rpc_ids[rpc_id] = shortlist
-				peer.find_node(key, rpc_id, socket=self.server.socket, peer_id=self.peer.id, peer_info=self.info) ######
+				peer.find_node(key, rpc_id, socket=self.server.socket, peer_id=self.peer.id, peer_info=self.info)
 			time.sleep(iteration_sleep)
 			boot_peer = None
 		return shortlist.results()
@@ -149,8 +148,6 @@ class DHT(object):
 			time.sleep(iteration_sleep)
 		return shortlist.completion_result()
 
-
-
 	# Return the list of connected peers
 	def peers (self):
 		return self.buckets.to_dict ()
@@ -165,8 +162,6 @@ class DHT(object):
 			for bnode in self.buckets.to_list ():
 				self.iterative_find_nodes(self.peer.id, boot_peer=Peer (bnode[0], bnode[1], bnode[2], bnode[3]))
 
-
-
 	# Get a value in a sync way, calling an handler
 	def get_sync (self, key, handler):
 		try:
@@ -175,7 +170,6 @@ class DHT(object):
 			d = None
 
 		handler (d)
-
 
 	# Get a value in async way
 	def get (self, key, handler):
@@ -204,7 +198,7 @@ class DHT(object):
 
 	# Operator []=
 	def __setitem__(self, key, value):
-		hashed_key = self.hash_function (key)
+		hashed_key = self.hash_function(key)
 		#print ('dht.set',key,value,hashed_key)
 		nearest_nodes = self.iterative_find_nodes(hashed_key)
 		if not nearest_nodes:

@@ -1,6 +1,6 @@
-import time
+# import time
 from kad import DHT
-
+import shelve
 
 """
 dhts = []
@@ -28,14 +28,14 @@ for x in range (0, 1):
 
 """
 
-host1, port1 = 'localhost', 3000
-dht1 = DHT(host1, port1)
+host1, port1 = 'localhost', 3001
+dht1 = DHT(host1, port1, storage=shelve.open('sto1.dat'))
 
-host2, port2 = 'localhost', 3001
-dht2 = DHT(host2, port2, seeds=[(host1, port1)])
+host2, port2 = 'localhost', 3002
+dht2 = DHT(host2, port2, seeds=[(host1, port1)], storage=shelve.open('sto2.dat'))
 
-host3, port3 = 'localhost', 3002
-dht3 = DHT(host3, port3, seeds=[(host2, port2)])
+host3, port3 = 'localhost', 3003
+dht3 = DHT(host3, port3, seeds=[(host2, port2)], storage=shelve.open('sto3.dat'))
 
 dht1["my_key"] = [u"My", u"json-serializable", u"Object"]
 
