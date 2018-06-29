@@ -1,7 +1,19 @@
+""" Simple python Kademlia DHT data store implementation.
+Useful for distributing a key-value store in a decentralized manner.
+
+To create a new DHT swarm, just call DHT() with the host and port
+that you will listen on. To join an existing DHT swarm, also provide
+bootstrap host and port numbers of any existing node.  The nodes
+will discover the rest of the swarm as appropriate during usage.
+
+"""
+
 import json
+import logging
 import random
 import socket
 import socketserver
+import sys
 import threading
 import time
 from .bucketset import BucketSet
@@ -11,6 +23,10 @@ from .storage import Shelve
 from .shortlist import Shortlist
 from . import hashing
 
+# hack to handle long integers in both python2 & 3 (where just have int)
+if sys.version_info > (3,):
+    long = int
+
 k = 20
 alpha = 3
 id_bits = 128
@@ -19,7 +35,8 @@ iteration_sleep = 1
 class DHTRequestHandler(socketserver.BaseRequestHandler):
 	def handle(self):
 		try:
-			message = json.loads(self.request[0].decode ('utf-8').strip())
+			message = json.loads(self.request[0].decode('utf-8').strip())
+			self.server.dht.logger.debug('handle request(%s)' % (str(message)))
 			message_type = message["message_type"]
 			if message_type == "ping":
 				self.handle_ping(message)
@@ -87,7 +104,9 @@ class DHTRequestHandler(socketserver.BaseRequestHandler):
 
 	def handle_store(self, message):
 		key = message["id"]
-		self.server.dht.data[str(key)] = message["value"]
+		value = message["value"]
+		self.server.dht.logger.info('store ("%s",%s)' % (str(key),str(value)))
+		self.server.dht.data[str(key)] = value
 
 
 class DHTServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
@@ -95,6 +114,9 @@ class DHTServer(socketserver.ThreadingMixIn, socketserver.UDPServer):
 		socketserver.UDPServer.__init__(self, host_address, handler_cls)
 		self.send_lock = threading.Lock()
 
+	def server_close(self):
+	        self.dht.logger.debug('server closing down')
+	        return socketserver.UDPServer.server_close(self)
 
 class DHT(object):
 	def __init__(self, host, port, id=None, seeds=[], storage={}, info={}, hash_function=hashing.hash_function, requesthandler=DHTRequestHandler):
@@ -107,15 +129,19 @@ class DHT(object):
 		self.data = self.storage
 		self.buckets = BucketSet(k, id_bits, self.peer.id)
 		self.rpc_ids = {} # should probably have a lock for this
-		self.server = DHTServer (self.peer.address(), requesthandler)
+		self.server = DHTServer(self.peer.address(), requesthandler)
 		self.server.dht = self
+		self.logger = logging.getLogger('DHT(%s:%d)' % (self.peer.host, self.peer.port))
+		self.logger.info('server init(id="%s")' % (id))
 		self.server_thread = threading.Thread(target=self.server.serve_forever)
 		self.server_thread.daemon = True
 		self.server_thread.start()
 		self.bootstrap(seeds)
+		self.logger.info('peers="%s"' % (str(self.peers())))
 
-	def identity (self):
+	def identity(self):
 		return self.peer.id
+
 
 	def iterative_find_nodes(self, key, boot_peer=None):
 		shortlist = Shortlist(k, key)
@@ -130,7 +156,7 @@ class DHT(object):
 				shortlist.mark(peer)
 				rpc_id = random.getrandbits(id_bits)
 				self.rpc_ids[rpc_id] = shortlist
-				peer.find_node(key, rpc_id, socket=self.server.socket, peer_id=self.peer.id, peer_info=self.info)
+				peer.find_node(key, rpc_id, socket=self.server.socket, peer_id=self.peer.id, peer_info=self.info) ######
 			time.sleep(iteration_sleep)
 			boot_peer = None
 		return shortlist.results()
@@ -148,9 +174,11 @@ class DHT(object):
 			time.sleep(iteration_sleep)
 		return shortlist.completion_result()
 
+
+
 	# Return the list of connected peers
-	def peers (self):
-		return self.buckets.to_dict ()
+	def peers(self):
+		return self.buckets.to_dict()
 
 	# Boostrap the network with a list of bootstrap nodes
 	def bootstrap(self, bootstrap_nodes = []):
@@ -158,48 +186,52 @@ class DHT(object):
 			boot_peer = Peer(bnode[0], bnode[1], "", "")
 			self.iterative_find_nodes(self.peer.id, boot_peer=boot_peer)
 
-		if len (bootstrap_nodes) == 0:
-			for bnode in self.buckets.to_list ():
-				self.iterative_find_nodes(self.peer.id, boot_peer=Peer (bnode[0], bnode[1], bnode[2], bnode[3]))
+		if len(bootstrap_nodes) == 0:
+			for bnode in self.buckets.to_list():
+				self.iterative_find_nodes(self.peer.id, boot_peer=Peer(bnode[0], bnode[1], bnode[2], bnode[3]))
+
+
 
 	# Get a value in a sync way, calling an handler
-	def get_sync (self, key, handler):
+	def get_sync(self, key, handler):
 		try:
 			d = self[key]
 		except:
 			d = None
 
-		handler (d)
+		handler(d)
+
 
 	# Get a value in async way
-	def get (self, key, handler):
-		#print ('dht.get',key)
+	def get(self, key, handler):
 		t = threading.Thread(target=self.get_sync, args=(key, handler))
-		t.start ()
+		t.start()
 
 
 	# Iterator
-	def __iter__ (self):
-		return map(lambda key: int(key), self.data.__iter__ ())
+	def __iter__(self):
+		return iter(map(lambda key: long(key), self.data.__iter__()))
 
 	# Operator []
 	def __getitem__(self, key):
-		if type (key) == int:
+		if type(key) == long:
 			hashed_key = key
 		else:
-			hashed_key = self.hash_function (key)
-
+			hashed_key = self.hash_function(key)
 		if str(hashed_key) in self.data:
-			return self.data[str(hashed_key)]
+			result = self.data[str(hashed_key)]
+			self.logger.debug('get("%s") at %d is %s' % (key, hashed_key, str(result)))
+			return result
 		result = self.iterative_find_value(hashed_key)
 		if result:
+			self.logger.debug('get("%s") at %d is %s' % (key, hashed_key, str(result)))
 			return result
 		raise KeyError
 
 	# Operator []=
 	def __setitem__(self, key, value):
 		hashed_key = self.hash_function(key)
-		#print ('dht.set',key,value,hashed_key)
+		self.logger.info('set("%s",%s) at %d' % (key, str(value), hashed_key))
 		nearest_nodes = self.iterative_find_nodes(hashed_key)
 		if not nearest_nodes:
 			self.data[str(hashed_key)] = value
