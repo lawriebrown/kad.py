@@ -1,7 +1,7 @@
 import hashlib
 import json
-# from .hashing import hash_function
 
+from .hashing import hash_function
 
 class Peer(object):
     ''' DHT Peer Information'''
@@ -21,15 +21,15 @@ class Peer(object):
         return repr(self.astriple())
 
     def _sendmessage(self, message, sock=None, peer_id=None, peer_info=None, lock=None):
-        message["peer_id"] = peer_id  # more like sender_id
+        message["peer_id"] = peer_id # more like sender_id
         message["peer_info"] = peer_info
         encoded = json.dumps(message)
         if sock:
             if lock:
                 with lock:
-                    sock.sendto(encoded.encode('ascii'), (self.host, self.port))
+                    sock.sendto(encoded.encode ('ascii'), (self.host, self.port))
             else:
-                sock.sendto(encoded.encode('ascii'), (self.host, self.port))
+                sock.sendto(encoded.encode ('ascii'), (self.host, self.port))
 
     def ping(self, socket=None, peer_id=None, peer_info=None, lock=None):
         message = {
