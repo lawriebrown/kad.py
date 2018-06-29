@@ -1,6 +1,15 @@
-""" KAD example two-node DHT.
+""" KAD example two-node DHT, with storage, and iteration.
 
-Code taken from project github.com/dakk/kad.py - README.md.
+Usage: kad-2node-demo.py [-h] [-v]
+
+Creates 2 linked KAD DHT nodes, assigns & retreieves some values,
+then iterates over all values known to 1 of the nodes.
+
+Uses "pysos.py" module for storage so creates plain text files compatible 
+when run with either python v2 & v3.
+
+Code adapted from project github.com/dakk/kad.py - README.md by
+Lawrie Brown June 2018.
 """
 
 from __future__ import print_function	# needed so print usable in lambda
@@ -40,6 +49,8 @@ dht2["akey3"] = ["Further","Strings","for key3"]
 # demo retrieve data from nodes
 print ("Blocking get from DHT1 = %s" % str(dht2["my_key"]))
 dht2.get ("my_key", lambda data: print("Threaded get from DHT2 = %s" % str(data)) )
+
+# test iteration over node data (only see values known on the node)
 print("Iterating over all values as seen by DHT2:")
 for key in dht2:
     print('"%s" -> %s' % (key, dht2[key]))
