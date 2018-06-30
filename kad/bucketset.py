@@ -20,15 +20,17 @@ class BucketSet(object):
 
 	def to_list (self):
 		l = []
-		for bucket in self.buckets: l += bucket
+		with self.lock:
+			for bucket in self.buckets: l += bucket
 		return l
 
 	def to_dict (self):
 		l = []
-		for bucket in self.buckets:
-			for peer in bucket:
-				if len (peer) == 4:
-					l.append ({'host': peer[0], 'port': peer[1], 'id': peer[2], 'info': peer[3]})
+		with self.lock:
+			for bucket in self.buckets:
+				for peer in bucket:
+					if len (peer) == 4:
+						l.append ({'host': peer[0], 'port': peer[1], 'id': peer[2], 'info': peer[3]})
 		return l
 
 	def insert(self, peer):
